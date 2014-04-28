@@ -1,0 +1,131 @@
+kill(all)$
+
+load("sph-kernel");
+load("integer_sequence");
+load("sph.mac")$
+
+maxima2punto(R, fname):= block([fw: openw(fname)],
+  write_data(R, fw),
+  close(fw));
+
+load("dump2maxima.mac")$
+finput: "wendland6/dump00000000.dat"$
+[lmp_data, atom_data]: dump2maxima(finput)$
+Lx: lmp_data['xhi] - lmp_data['xlo]$
+Ly: lmp_data['yhi] - lmp_data['ylo]$
+L: [Lx, Ly];
+ncut: 4.50;
+cutoff: 1.2/30.0*ncut;
+ktype: 'wendland6;
+
+define_kernel(ndim, cutoff, ktype, 'w, 'dw)$
+R: maplist("[", atom_data['x], atom_data['y])$
+ndim: 2;
+
+shift: listify( apply('cartesian_product, makelist({0, -1, 1}, ndim)) )$
+shift: cons(makelist(0, ndim), delete(makelist(0, ndim), shift))$
+
+/*
+L: [4, 4]$
+ncell: [4, 4]$
+*/
+ncell: maplist(lambda([x], if x=floor(x) then x else floor(x)+1), L/cutoff);
+cellsize: L/ncell;
+dx: cutoff/3$
+np: length(R);
+maxima2punto(R, "p.dat");
+
+sdpd_mass: 1.0*(1.2/30.0)^2;
+m: makelist(sdpd_mass, np)$
+
+expr: sin(2*%pi*x/Lx);
+A: makelist( subst([x=ra[1], y=ra[2]], expr), ra, R)$
+
+/*
+R: makelist([random_continuous_uniform(0, L[1]), random_continuous_uniform(0, L[1])], i, np)$
+*/
+
+r2cell(ri):= maplist(lambda([x, c], floor(x/c)), ri, cellsize)$
+neicell(c):= maplist( lambda([q], pbc_ncell(c + q)), shift)$
+
+/*
+create_clist():= (
+  kill(cell_lst),
+  for idx in listify(apply('cartesian_product, create_list(setify(0 .. nc-1), nc, ncell))) do arraymake(cell_lst, idx) :: [],
+  for a:1  thru np do block([cidx: arraymake(cell_lst, r2cell(R[a]))],
+    cidx :: endcons(a, ev(cidx, nouns))),
+  'done)$
+*/
+create_clist();
+ 
+lshift: maplist(lambda([q], L*q), shift);
+pbc(ri):= makelist(if ri[d]>L[d] then ri[d]-L[d] else if ri[d]<0 then ri[d]+L[d] else ri[d], d, ndim);
+pbc_ncell(ri):= makelist(if ri[d]>=ncell[d] then ri[d]-ncell[d] else if ri[d]<0 then ri[d]+ncell[d] else ri[d], d, ndim);
+
+nlist(a):= flatten(maplist(lambda([idx], apply('subvar, cons(cell_lst, idx))), neicell(r2cell(R[a]))));
+nlist_r(ra):=flatten(maplist(lambda([idx], apply('subvar, cons(cell_lst, idx))), neicell(r2cell(ra))));
+
+load(distrib)$
+load (descriptive)$
+
+sph_approx([x]):= lsum(A[i]*m[i]/rho[i]*w(dist(x, R[i])), i, nlist_r(x))$
+dsph_approx([x]):= lsum(float(A[i]*m[i]/rho[i]*e(R[i], R[j])*dw(dist(x, R[i]))), i, nlist_r(x))$
+
+dsph_approx_j(a):= lsum(if a#b then -float((A[a] + A[b])*m[b]/rho[b]*e(R[a], R[b])*dw(dist(R[b], R[a]))) else 0, b, nlist(a))$
+
+dist_aux(ra, rb):= block([dr: rb-ra], sqrt( dr.dr ));
+dist(ra, rb):= catch(xreduce('min, maplist( lambda([q],
+      block([d: dist_aux(ra + q, rb)],
+        if d<2*cutoff then throw(d) else d)),
+      lshift)));
+
+e(ra, rb):= if ra=rb then 0 else
+block([aux: catch(xreduce(lambda([a, b],
+        if first(a)<first(b) then a else b),
+      maplist( lambda([q],
+          block([d: [dist_aux(ra + q, rb), rb - (ra + q)]],
+            if first(d)<2*cutoff then throw(d) else d
+            )),
+        lshift)))],
+  second(aux)/first(aux));
+
+/*
+nn: makelist(lsum(if dist(R[i], R[j])<cutoff then 1 else 0, i, nlist(j)),
+  j, np);
+*/
+c: 1.0;
+Peq(rho):= c^2*rho$
+v: makelist([0, 0], np)$
+mu: 1.0;
+dt: min( dx/(8*c), dx^2/mu/8);
+
+timer(r2cell, neicell, create_clist, pbc, pbc_ncell, dist, dist_aux, e, Peq);
+
+compile (dist_aux, dist);
+fw: opena("test.dat");
+rho: makelist(m[j]*lsum(float(w(dist(R[j], R[i]))), i, nlist(j)),
+    j, np);
+
+nsteps: 0;
+for istep thru nsteps do block([],
+  rho: makelist(m[j]*lsum(float(w(dist(R[j], R[i]))), i, nlist(j)),
+    j, np),
+  rho: float(rho),
+  P: maplist(Peq, rho),
+  Fc: makelist(lsum(if i#j then -m[j]*m[i]*(P[i]/rho[i]^2 + P[j]/rho[j]^2)*e(R[i], R[j])*dw(dist(R[j], R[i])) else 0, i, nlist(j)),
+    j, np),
+  Fd: makelist(lsum(if i#j then mu*m[j]*m[i]*(v[j]-v[i])/(rho[i]*rho[j])/dist(R[j], R[i])*dw(dist(R[j], R[i])) else 0, i, nlist(j)),
+    j, np),
+  F: Fd + Fc,
+  v: float(v + dt*F/m),
+  R: float(R + dt*v),
+  R: maplist(pbc, R),
+  create_clist(),
+  print(istep),
+  write_data(R, fw),
+  newline(fw));
+load("draw");
+close(fw);
+
+dA: maplist('dsph_approx_j, 1 .. length(R));
+draw3d(points( maplist('first, R), maplist('second, R), maplist('first, dA)));

@@ -1,0 +1,83 @@
+load("integer_sequence");
+/* general SPH functions */
+
+/* numer of dimensions (1, 2, 3) */
+define_variable(ndim, 2, integer)$
+
+/* SPH kernel cutoff */
+define_variable(cutoff, 1.0, float)$
+
+/* domain size */
+define_variable(L0, 4.0, float);
+define_variable(L, makelist(L0, ndim), any);
+
+/* write particles' data to in <X Y Z> text format */
+maxima2punto(R, fname):= block([fw: openw(fname)],
+  write_data(R, fw),
+  close(fw))$
+/* set ncell and cellsize for particle search algorithm */
+eps: 1e-12*cutoff;
+ncell: maplist(lambda([x], if abs(x-round(x))<eps then round(x) else floor(x)), L/cutoff);
+cellsize: float(L/ncell)$
+
+/* define shifts of the coordianates for neighboring cells */
+shift: listify( apply('cartesian_product, makelist({0, -1, 1}, ndim)) );
+/* put elements with more zeros in front for faster calculatins (see dist()) */
+shift: block([listarith: true], sort(shift, lambda([a, b], orderlessp(abs(a), abs(b)))));
+lshift: block([listarith: true], maplist(lambda([q], L*q), shift));
+
+/* returns cell position of the point
+(%i11) r2cell([2.0, 2.0]);
+(%o11)                              [2, 2]
+*/
+r2cell(ri):= (if not listp(cellsize) then error("cellsize must be set"),
+  maplist(lambda([x, c], floor(x/c)), ri, cellsize))$
+
+neicell(c):= maplist( lambda([q], pbc_ncell(c + q)), shift)$
+
+frem_fl(x, y):= if x>=0 then ?rem(x,y) else y - ?rem(-x, y);
+frem(x, y):= frem_fl(float(x), float(y));
+frem_int(x, y):= frem_fl(x, y);
+/* wrap with periodic boundaries a postion */
+
+/*
+pbc(ri):= makelist(if ri[d]>L[d] then ri[d]-L[d] else if ri[d]<0 then ri[d]+L[d] else ri[d], d, ndim);
+pbc_ncell(ri):= makelist(if ri[d]>=ncell[d] then ri[d]-ncell[d] else if ri[d]<0 then ri[d]+ncell[d] else ri[d], d, ndim);
+*/
+
+pbc(ri):= maplist(frem, ri, L);
+pbc_ncell(ri):= maplist(frem_int, ri, ncell);
+
+/* create a cell list `cell_lst' */
+create_clist():=(
+  if not listp(R) then error("R is not set"),
+  if not listp(ncell) then error("R is not set"),  
+  remarray(cell_lst),
+  for idx in listify(apply('cartesian_product, create_list(setify(0 .. nc-1), nc, ncell))) do arraymake(cell_lst, idx) :: [],
+  for a:1  thru length(R) do block([cidx: arraymake(cell_lst, r2cell(R[a]))],
+    cidx :: cons(a, ev(cidx, nouns))),
+  'done);
+
+/* return a list of neighboring particles for a given particle `a' */
+nlist(a):= flatten(maplist(lambda([idx], apply('subvar, cons(cell_lst, idx))), neicell(r2cell(R[a]))));
+/* return a list of neighboring particles for a given positon `ra' */
+nlist_r(ra):=flatten(maplist(lambda([idx], apply('subvar, cons(cell_lst, idx))), neicell(r2cell(ra))));
+
+dist_aux(ra, rb):= ''(
+  if ndim=1 then      (ra[1] - rb[1])^2
+  else if ndim=2 then sqrt((ra[1] - rb[1])^2 + (ra[2] - rb[2])^2)
+  else if ndim=3 then sqrt((ra[1] - rb[1])^2 + (ra[2] - rb[2])^2 + (ra[3] - rb[3])^2));
+dist(ra, rb):= catch(xreduce('min, maplist( lambda([q],
+      block([d: dist_aux(ra + q, rb)],
+        if d<2*cutoff then throw(d) else d)),
+      lshift)));
+
+e(ra, rb):= if ra=rb then 0 else
+block([aux: catch(xreduce(lambda([a, b],
+        if first(a)<first(b) then a else b),
+      maplist( lambda([q],
+          block([d: [dist_aux(ra + q, rb), rb - (ra + q)]],
+            if first(d)<2*cutoff then throw(d) else d
+            )),
+        lshift)))],
+  second(aux)/first(aux));

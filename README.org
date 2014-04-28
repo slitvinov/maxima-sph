@@ -1,0 +1,3 @@
+[[file:sph.mac]] :: generic sph functions for all diemansions
+[[file:circle.mac]] :: sph on a circle
+[[file:sphere.mac]] :: sph on a sphere

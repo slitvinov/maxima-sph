@@ -1,0 +1,51 @@
+dump2maxima(fname):=block([s, l, tmp_data, colnames, q, bs],
+    s: openr(fname),
+    l: "",
+    /* search for time step */
+    while ssearch("ITEM: TIMESTEP", l)=false do (l: readline(s)),
+    lmp_data['timestep]: parse_string(readline(s)),
+    while ssearch("ITEM: NUMBER OF ATOMS", l)=false do (l: readline(s)),
+    lmp_data['natoms]: parse_string(readline(s)),
+    while ssearch("ITEM: BOX BOUNDS", l)=false do (l: readline(s)),
+    bs: split(l, " "),
+    lmp_data['bounds]: [bs[4], bs[5], bs[6]],
+    [lmp_data['xlo], lmp_data['xhi]]: map('parse_string, split(readline(s), " ")),
+    [lmp_data['ylo], lmp_data['yhi]]: map('parse_string, split(readline(s), " ")),
+    [lmp_data['zlo], lmp_data['zhi]]: map('parse_string, split(readline(s), " ")),
+    /* search for atoms */
+    while ssearch("ITEM: ATOMS", l)=false do (l: readline(s)),
+    /* read atoms data */
+    tmp_data: read_nested_list(s),
+    colnames: split(l, " "),
+    /* remove ITEM: ATOMS */
+    colnames: rest(colnames, 2),
+    colnames: maplist(parse_string, colnames),
+    for q: 1 thru length(colnames) do
+    (
+      atom_data[colnames[q]]: map( lambda([x], x[q]), tmp_data)
+      ),
+    lmp_data['columns]: colnames,
+    close(s),
+    [lmp_data, atom_data]);
+
+maxima2dump(lmp_data, atom_data, fname):=
+with_stdout(fname,
+  block([m], local(m, tprint, nprint),
+    tprint([l]):=apply('printf, cons(true, l)),
+    nprint(s):=printf(true, "~a~%", s),
+    nprint("ITEM: TIMESTEP"),
+    tprint("~d~%", lmp_data['timestep]),
+    nprint("ITEM: NUMBER OF ATOMS"),
+    tprint("~d~%", (lmp_data['natoms])),
+    printf(true, "ITEM: BOX BOUNDS"),
+    for b in lmp_data['bounds] do printf(true, " ~a", pp),
+    printf(true, "~%"),
+    tprint("~g ~g~%", lmp_data['xlo], lmp_data['xhi]),
+    tprint("~g ~g~%",  lmp_data['ylo], lmp_data['yhi]),
+    tprint("~g ~g~%", lmp_data['zlo], lmp_data['zhi]),
+    tprint("~a", "ITEM: ATOMS"),
+    tprint("~{ ~a~}~%", lmp_data['columns]),
+    if not emptyp(atom_data) then (
+      m: apply(matrix,
+        makelist(subvar(atom_data, el), el, lmp_data['columns])),
+      write_data(transpose(m), ?\*standard\-output\*))))$

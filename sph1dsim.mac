@@ -1,0 +1,57 @@
+kill(all);
+load("sph-kernel2.mac");
+load("nint");
+
+ndim: 1;
+nx : 9;
+L0: 1.2;
+dx: L0/nx;
+cutoff: 2.5*dx;
+
+load("sph.mac");
+define_kernel(ndim, cutoff, 'quintic, 'w_aux, 'dw_aux);
+w(r):=''(float(w_aux(r)))$
+dw(r):=''(float(dw_aux(r)))$
+
+if ndim=2 then
+R: xreduce('append, outermap(lambda([[rr]], -0.5*dx + rr*dx), 1 .. nx, 1 .. nx))
+else 
+R: xreduce('append, outermap(lambda([[rr]], -0.5*dx + rr*dx), 1 .. nx))$
+
+load("distrib")$
+R: maplist(lambda([r], r+makelist(random_continuous_uniform(-dx, dx), ndim)), R)$
+R: maplist(pbc, R)$
+
+np: length(R);
+m: makelist(1, i, np)$
+
+create_clist();
+nn: makelist(lsum(if dist(R[i], R[j])<cutoff then 1 else 0, i, nlist(j)),
+  j, np);
+
+c: 10.0;
+Peq(rho):= c^2*rho$
+v: makelist(makelist(0, ndim), np)$
+mu: 3.0;
+dt: min( dx/(8*c), dx^2/mu/8);
+
+nsteps: 10000;
+fw: opena("test.dat");
+for istep thru nsteps do block([],
+  rho: makelist(m[j]*lsum(w(dist(R[j], R[i])), i, nlist(j)),
+    j, np),
+  P: maplist(Peq, rho),
+  Fc: makelist(lsum(if i#j then -m[j]*m[i]*(P[i]/rho[i]^2 + P[j]/rho[j]^2)*e(R[i], R[j])*dw(dist(R[j], R[i])) else 0, i, nlist(j)),
+    j, np),
+  Fd: makelist(lsum(if i#j then mu*m[j]*m[i]*(v[j]-v[i])/(rho[i]*rho[j])/dist(R[j], R[i])*dw(dist(R[j], R[i])) else 0, i, nlist(j)),
+    j, np),
+  F: Fd + Fc,
+  v: v + dt*F/m,
+  R: R + dt*v,
+  R: maplist(pbc, R),
+  create_clist(),
+  print(istep),
+  write_data(R, fw),
+  print([lmin(rho), lmax(rho)]),
+  newline(fw));
+close(fw);

@@ -1,0 +1,83 @@
+/* find a distance between twoo points over a circle */
+kill(all);
+ndim: 3;
+np: 100;
+dx: 1/np^(1/ndim);
+cutoff: float(3*dx);
+
+load("sph.mac");
+load("sph-kernel.mac");
+load("descriptive");
+define_kernel(ndim, cutoff, 'wendland6, 'w, 'dw)$
+w(r):= float(''(w(r)));
+dw(r):= float(''(dw(r)));
+
+vector_cos(A, B):= A.B / (sqrt(A.A)*sqrt(B.B) );
+spherical2rect(A):= (
+if not listp(A) or length(A)#3 then error("spherical2rect should be called with vector of length 3"),
+block([r: first(A), t: second(A), p: third(A)],
+  [r*sin(t)*cos(p), r*sin(t)*sin(p), r*cos(t)]));
+
+rect2spherical(A):= (
+if not listp(A) or length(A)#3 then error("rect2spherical should be called with vector of length 3"),
+block([x: first(A), y: second(A), z: third(A), r],
+  r: sqrt(x^2+y^2+z^2),
+  [r, acos(z/r), atan(y/x)]));
+
+rect2polar(A):= (
+if not listp(A) or length(A)#2 then error("rect2polar should be called with vector of length 2"),
+block([x: first(A), y: second(A)],
+  [sqrt(x^2+y^2), atan2(y, x)]));
+
+polar2rect(A):= (
+  if not listp(A) or length(A)#2 then error("polar2rect should be called with vector of length 2"),
+  block([r: first(A), t: second(A)],
+  [r*cos(t), r*sin(t)]));
+
+/* redefine lshift */
+shift: [[0],[-1],[1]]$
+lshift: float(2*%pi*shift);
+
+dist(ra, rb):= abs(acos(vector_cos(ra, rb)));
+e(ra, rb):= if ra=rb then 0 else (rb - ra)/dist(rb, ra);
+
+vector_project(A, B):= (A.B)/(B.B)*B;
+vector_reject (A, B):= A - vector_project(A, B);
+vector_back_on_sphere(A):= A / sqrt(A.A);
+
+load("distrib");
+p_lst: makelist(random_continuous_uniform(0, 2*%pi), i, np);
+t_lst: makelist(random_continuous_uniform(0, %pi), i, np);
+
+R: maplist( lambda([tt, pp], [1, tt, pp]), t_lst, p_lst)$
+R: maplist('spherical2rect, R)$
+
+maxima2punto(float(R), "p.dat");
+
+c: 10.0;
+Peq(rho):= c^2*rho$
+v: makelist([0, 0, 0], np)$
+mu: 1.0;
+dt: float(min( dx/(8*c), dx^2/mu/8));
+
+m: makelist(1.0, np)$
+
+nlist(j):= makelist(i, i, np);
+nn: makelist(lsum(if dist(R[i], R[j])<cutoff then 1 else 0, i, nlist(j)),
+  j, np);
+
+for istep thru 100 do (
+  rho: float(makelist(m[j]*sum(w(dist(R[j], R[i])), i, 1, np),
+      j, np)),
+  P: maplist(Peq, rho),
+  Fc: makelist(sum(if i#j then -m[j]*m[i]*(P[i]/rho[i]^2 + P[j]/rho[j]^2)*e(R[i], R[j])*dw(dist(R[j], R[i])) else 0, i, 1, np),
+    j, np),
+  Fd: makelist(sum(if i#j then mu*m[j]*m[i]*(v[j]-v[i])/(rho[i]*rho[j])/dist(R[j], R[i])*dw(dist(R[j], R[i])) else 0, i, 1, np),
+    j, np),
+  F: Fd + Fc,
+  v: float(v + dt*F/m),
+  R: float(R + dt*v),
+  R: maplist('vector_back_on_sphere, R),
+  maxima2punto(float(R), "p.dat"),
+  print([smin(rho), smax(rho)]),
+  print(istep));

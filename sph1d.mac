@@ -1,0 +1,51 @@
+kill(all);
+load("sph-kernel");
+load("nint");
+
+ndim: 1;
+cutoff: 1;
+L0: 1;
+
+load("sph.mac");
+define_kernel(ndim, cutoff, ['quintic, 2], 'w, 'dw);
+
+np: 5;
+dx: cutoff/2;
+R: makelist(1/2*dx + dx*(i-1), i, np);
+
+sph_approx(x):=sum(A[i]*m[i]/rho[i]*w(dist(x, R[i])), i, 1, np)$
+make_sphplot(i):=block([fname, lst, s, lw, x],
+  lst: makelist('w('dist(x, R[i]))*m[i]/rho[i], i, np),
+  lst: endcons('sph_approx(x), lst),
+  lw:  2,
+  apc: 2,
+  s: cons('style, endcons([lines, 3, apc], makelist([lines, lw, mod(i+2, 10)], i, np))),
+  fname: printf(false, "g~5,'0d.png", i),
+  plot2d(lst, [x, 0, first(L)], ['gnuplot_out_file, fname], ['gnuplot_term, png], ['gnuplot_preamble, "set key off"], s))$
+
+load("distrib")$
+R: makelist([random_continuous_uniform(i*dx, (i+1)*dx)], i, np)$
+R: maplist(pbc, R)$
+A: makelist(1, i, np);
+m: makelist(1, i, np);
+
+nn: makelist(sum(if dist(R[i], R[j])<cutoff then 1 else 0, i, 1, np),
+  j, np);
+
+load(fmin_cobyla)$
+
+for istep thru 40 do block([],
+  rho: makelist(m[j]*sum(w(dist(R[j], R[i])), i, 1, np),
+    j, np),
+  make_sphplot(istep),
+  cout: fmin_cobyla('sph_approx, [x], L/2, constraints = [x<=first(L), 0<=x], 'iprint=1),
+  Rmin: rhs(cout[1][1]),
+  np: np+1,
+  A: endcons(1, A),
+  m: endcons(1, m),
+  print(Rmin),
+  R: endcons(Rmin, R));
+
+
+/* plot2d([sph_approx(x), 1], [x, 0, Lx], [y, 0, 1.1]); */
+
