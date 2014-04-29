@@ -15,6 +15,7 @@ define_variable(L, makelist(L0, ndim), any);
 maxima2punto(R, fname):= block([fw: openw(fname)],
   write_data(R, fw),
   close(fw))$
+
 /* set ncell and cellsize for particle search algorithm */
 eps: 1e-12*cutoff;
 ncell: maplist(lambda([x], if abs(x-round(x))<eps then round(x) else floor(x)), L/cutoff);

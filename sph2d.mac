@@ -1,15 +1,18 @@
 kill(all)$
 
-load("sph-kernel");
-load("integer_sequence");
+push("pw/###.mac", file_search_maxima)$
+push("sph-kernel/###.mac", file_search_maxima)$
+push("dump2maxima/###.mac", file_search_maxima)$
+
+load("sph-kernel.mac");
 load("sph.mac")$
-
-maxima2punto(R, fname):= block([fw: openw(fname)],
-  write_data(R, fw),
-  close(fw));
-
 load("dump2maxima.mac")$
-finput: "wendland6/dump00000000.dat"$
+
+load("distrib")$
+load ("descriptive")$
+
+
+finput: "particle_configurations/wendland6.dat"$
 [lmp_data, atom_data]: dump2maxima(finput)$
 Lx: lmp_data['xhi] - lmp_data['xlo]$
 Ly: lmp_data['yhi] - lmp_data['ylo]$
@@ -25,10 +28,6 @@ ndim: 2;
 shift: listify( apply('cartesian_product, makelist({0, -1, 1}, ndim)) )$
 shift: cons(makelist(0, ndim), delete(makelist(0, ndim), shift))$
 
-/*
-L: [4, 4]$
-ncell: [4, 4]$
-*/
 ncell: maplist(lambda([x], if x=floor(x) then x else floor(x)+1), L/cutoff);
 cellsize: L/ncell;
 dx: cutoff/3$
@@ -41,23 +40,7 @@ m: makelist(sdpd_mass, np)$
 expr: sin(2*%pi*x/Lx);
 A: makelist( subst([x=ra[1], y=ra[2]], expr), ra, R)$
 
-/*
-R: makelist([random_continuous_uniform(0, L[1]), random_continuous_uniform(0, L[1])], i, np)$
-*/
-
-r2cell(ri):= maplist(lambda([x, c], floor(x/c)), ri, cellsize)$
-neicell(c):= maplist( lambda([q], pbc_ncell(c + q)), shift)$
-
-/*
-create_clist():= (
-  kill(cell_lst),
-  for idx in listify(apply('cartesian_product, create_list(setify(0 .. nc-1), nc, ncell))) do arraymake(cell_lst, idx) :: [],
-  for a:1  thru np do block([cidx: arraymake(cell_lst, r2cell(R[a]))],
-    cidx :: endcons(a, ev(cidx, nouns))),
-  'done)$
-*/
 create_clist();
- 
 lshift: maplist(lambda([q], L*q), shift);
 pbc(ri):= makelist(if ri[d]>L[d] then ri[d]-L[d] else if ri[d]<0 then ri[d]+L[d] else ri[d], d, ndim);
 pbc_ncell(ri):= makelist(if ri[d]>=ncell[d] then ri[d]-ncell[d] else if ri[d]<0 then ri[d]+ncell[d] else ri[d], d, ndim);
@@ -65,29 +48,11 @@ pbc_ncell(ri):= makelist(if ri[d]>=ncell[d] then ri[d]-ncell[d] else if ri[d]<0 
 nlist(a):= flatten(maplist(lambda([idx], apply('subvar, cons(cell_lst, idx))), neicell(r2cell(R[a]))));
 nlist_r(ra):=flatten(maplist(lambda([idx], apply('subvar, cons(cell_lst, idx))), neicell(r2cell(ra))));
 
-load(distrib)$
-load (descriptive)$
 
 sph_approx([x]):= lsum(A[i]*m[i]/rho[i]*w(dist(x, R[i])), i, nlist_r(x))$
 dsph_approx([x]):= lsum(float(A[i]*m[i]/rho[i]*e(R[i], R[j])*dw(dist(x, R[i]))), i, nlist_r(x))$
 
 dsph_approx_j(a):= lsum(if a#b then -float((A[a] + A[b])*m[b]/rho[b]*e(R[a], R[b])*dw(dist(R[b], R[a]))) else 0, b, nlist(a))$
-
-dist_aux(ra, rb):= block([dr: rb-ra], sqrt( dr.dr ));
-dist(ra, rb):= catch(xreduce('min, maplist( lambda([q],
-      block([d: dist_aux(ra + q, rb)],
-        if d<2*cutoff then throw(d) else d)),
-      lshift)));
-
-e(ra, rb):= if ra=rb then 0 else
-block([aux: catch(xreduce(lambda([a, b],
-        if first(a)<first(b) then a else b),
-      maplist( lambda([q],
-          block([d: [dist_aux(ra + q, rb), rb - (ra + q)]],
-            if first(d)<2*cutoff then throw(d) else d
-            )),
-        lshift)))],
-  second(aux)/first(aux));
 
 /*
 nn: makelist(lsum(if dist(R[i], R[j])<cutoff then 1 else 0, i, nlist(j)),

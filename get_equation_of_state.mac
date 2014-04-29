@@ -1,0 +1,10 @@
+/* return an equation of state */
+
+get_equation_of_state(rho0, soundspeed, gamma, rho_background):= block([k, eq, so, rho, body, p],
+  p : k*(rho/rho0)^gamma - k*rho_background^gamma,
+  eq: diff(p, rho) = c^2,
+  eq: subst(rho=rho0, eq),
+  so: solve(eq, k),
+  buildq([body: subst(so, p)],
+    lambda([rho], body)));
+

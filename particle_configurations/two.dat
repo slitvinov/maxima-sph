@@ -1,0 +1,11 @@
+ITEM: TIMESTEP
+0
+ITEM: NUMBER OF ATOMS
+2
+ITEM: BOX BOUNDS pp pp pp
+0 1
+0 1
+-0.01 0.01
+ITEM: ATOMS id type x y z vx vy vz c_rho_peratom v_dAsphx v_dA v_dA_err 
+1 1 0.5 0.5 0 1 1 0 0.42647 -0.355201 -6.28319 0.943468 
+2 1 0.51 0.49 0 0.1 0.5 0 0.42647 0.355201 -6.27079 1.05456 

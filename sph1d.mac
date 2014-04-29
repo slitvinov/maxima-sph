@@ -1,5 +1,5 @@
 kill(all);
-load("sph-kernel");
+load("sph-kernel.mac");
 load("nint");
 
 ndim: 1;
