@@ -1,0 +1,73 @@
+kill(all);
+load("sph-kernel.mac");
+load("get_equation_of_state.mac");
+load("nint");
+load("descriptive");
+load("distrib");
+
+ndim: 2;
+L0: 1.2;
+cutoff: 1.2/10;
+load("sph.mac");
+
+define_variable(ncut, 1.0, float);
+nx: round(ncut*10);
+dx: L0/nx;
+define_variable(ktype, wendland6, any)$
+block([numer: true], define_kernel(ndim, cutoff, 'wendland6, 'w, 'dw));
+
+R: create_list([dx/2 + dx*(i-1), dx/2 + dx*(j-1)], i, 1, nx, j, 1, nx)$
+define_variable(del, 0.02, float)$
+if del>0 then block([del_dim: del*dx],
+  del_dim: del*dx,
+  dR: makelist(makelist(random_continuous_uniform(0, del_dim), ndim), length(R)),
+  R: R + dR,
+  R: maplist('pbc, R))$
+
+np: length(R);
+rho0: 1.0;
+mass: rho0*dx^ndim;
+m: makelist(mass, i, np)$
+
+create_clist();
+c: 4.2;
+sdpd_gamma: 1.0;
+Peq: get_equation_of_state(rho0, c, sdpd_gamma, 0);
+eta: 1.0;
+
+rho: makelist(m[j]*lsum(w(dist(R[j], R[i])), i, nlist(j)), j, np)$
+P: maplist('Peq, rho)$
+
+Fc: sph_sum(-1/2*(m[j]/rho[j])*(m[i]/rho[i])*(P[i] + P[j])*e(R[i], R[j])*dw(dist(R[j], R[i])))$
+
+expr: block([numer: true], sin(2*%pi*x/L0));
+dexpr: diff(expr, x);
+maxD:  2*%pi/L0;
+A(x, y):= ''expr;
+A[i]:= block([x: part(R[i], 1), y: part(R[i], 2)], ''expr);
+dA[i]:= block([x: part(R[i], 1), y: part(R[i], 2)], ''dexpr);
+dAsph: maplist('first,
+  sph_sum(-(A[i] + A[j])*m[j]/rho[i]*e(R[j], R[i])*dw(dist(R[j], R[i]))))$
+dAexact: makelist(dA[i], i, 1, np)$
+
+
+l1(x, y):= block([numer: true], mean( abs(x - y) ) / maxD)$
+dsmoth_rph(a):= block([x0: first(R[a]), y0: second(R[a])],
+  quad_qag ('quad_qag ( block([x: 'r*cos(phi), y: 'r*sin(phi)],
+        -A(x+x0, y+y0) * dw('r) * 'r * cos('phi)),
+      'r, 0, cutoff, 3) [1], 'phi, 0, 2*%pi, 3) [1] );
+
+trace(dsmoth_rph);
+dAsmothed: makelist(dsmoth_rph(i), i, 1, np);
+dAsmothed: makelist(i, i, 1, np);
+
+dl_sph_exact     :block([numer: true], l1(dAexact, dAsph));
+dl_sph_smothed   :block([numer: true], l1(dAsmothed, dAsph));
+dl_smothed_exact :block([numer: true], l1(dAsmothed, dAexact));
+res: vmax(Fc);
+maxima2punto(R, "p.dat");
+
+fw: opena("l1-new.dat");
+write_data(float([ktype, ncut, del, dl_sph_exact,
+  dl_sph_smothed, dl_smothed_exact, res, L0, round(nx), cutoff]), fw);
+close(fw);
