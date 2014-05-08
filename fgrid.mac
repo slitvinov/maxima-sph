@@ -1,0 +1,132 @@
+push(file_search_maxima: map('
+  "/home/vital303/work/lammps-sdpd/tools/maxima/pw",
+  "/home/vital303/work/lammps-sdpd/tools/maxima/nint"])$
+
+
+load("sph-kernel.mac");
+load("distrib")$
+load("integer_sequence")$
+
+maxima2punto(R, fname):= block([fw: openw(fname)],
+  write_data(R, fw),
+  close(fw));
+
+ndim: 2;
+define_variable(ncut, 4.50, float)$
+nx:   60*ncut/3.0;
+Lx:   1.2*nx/30;
+dx:   Lx/nx;
+L:    [Lx, Lx];
+cutoff: dx*ncut;
+
+define_variable(ktype, laguerrewendland4eps, any)$
+
+define_kernel(ndim, cutoff, ktype, 'w, 'dw)$
+R: create_list([dx/2 + dx*(i-1), dx/2 + dx*(j-1)], i, 1, nx, j, 1, nx)$
+np: length(R);
+
+shift: listify( apply('cartesian_product, makelist({0, -1, 1}, ndim)) )$
+shift: cons(makelist(0, ndim), delete(makelist(0, ndim), shift));
+lshift: maplist(lambda([q], L*q), shift);
+pbc(ri):= makelist(if ri[d]>L[d] then ri[d]-L[d] else if ri[d]<0 then ri[d]+L[d] else ri[d], d, ndim);
+pbc_ncell(ri):= makelist(if ri[d]>=ncell[d] then ri[d]-ncell[d] else if ri[d]<0 then ri[d]+ncell[d] else ri[d], d, ndim);
+
+define_variable(del, 0.02, float)$
+if del>0 then block([del_dim: del*dx],
+  del_dim: del*dx,
+  dR: makelist(makelist(random_continuous_uniform(0, del_dim), ndim), np),
+  R: R + dR,
+  R: maplist('pbc, R));
+maxima2punto(R, "p.dat");
+
+eps: 1e-12*cutoff;
+ncell: maplist(lambda([x], if abs(x-round(x))<eps then round(x) else floor(x)), L/cutoff);
+cellsize: L/ncell;
+
+sdpd_mass: 1.0*dx^ndim;
+m: makelist(sdpd_mass, np)$
+
+expr: sin(2*%pi*x/Lx);
+A: makelist( subst([x=ra[1], y=ra[2]], expr), ra, R)$
+dexpr: diff(expr, x);
+
+r2cell(ri):= maplist(lambda([x, c], floor(x/c)), ri, cellsize)$
+neicell(c):= maplist( lambda([q], pbc_ncell(c + q)), shift)$
+
+create_clist():= (
+  kill(cell_lst),
+  for idx in listify(apply('cartesian_product, create_list(setify(0 .. nc-1), nc, ncell))) do arraymake(cell_lst, idx) :: [],
+  for a:1  thru np do block([cidx: arraymake(cell_lst, r2cell(R[a]))],
+    cidx :: endcons(a, ev(cidx, nouns))),
+  'done)$
+create_clist();
+ 
+
+nlist(a):= flatten(maplist(lambda([idx], apply('subvar, cons(cell_lst, idx))), neicell(r2cell(R[a]))));
+nlist_r(ra):=flatten(maplist(lambda([idx], apply('subvar, cons(cell_lst, idx))), neicell(r2cell(ra))));
+
+load("distrib")$
+
+sph_approx([x]):= lsum(A[i]*m[i]/rho[i]*w(dist(x, R[i])), i, nlist_r(x))$
+dsph_approx([x]):= lsum(float(A[i]*m[i]/rho[i]*e(R[i], R[j])*dw(dist(x, R[i]))), i, nlist_r(x))$
+dsph_approx_j(a):= lsum(if a#b then -float((A[a] + A[b])*m[b]/rho[b]*e(R[a], R[b])*dw(dist(R[b], R[a]))) else 0, b, nlist(a))$
+
+dist_aux(ra, rb):= block([dr: rb-ra], sqrt( dr.dr ))$
+dist(ra, rb):= catch(xreduce('min, maplist( lambda([q],
+      block([d: dist_aux(ra + q, rb)],
+        if d<2*cutoff then throw(d) else d)),
+      lshift)))$
+
+e(ra, rb):= if ra=rb then 0 else
+block([aux: catch(xreduce(lambda([a, b],
+        if first(a)<first(b) then a else b),
+      maplist( lambda([q],
+          block([d: [dist_aux(ra + q, rb), rb - (ra + q)]],
+            if first(d)<2*cutoff then throw(d) else d
+            )),
+        lshift)))],
+  second(aux)/first(aux))$
+
+/*
+nn: makelist(lsum(if dist(R[i], R[j])<cutoff then 1 else 0, i, nlist(j)),
+  j, np);
+*/
+compile (dist_aux, dist, dw);
+rho: makelist(m[j]*lsum(float(w(dist(R[j], R[i]))), i, nlist(j)),
+    j, np)$
+  
+eps: 1e-12*cutoff;
+A(x, y):= ''(expr);
+dsmoth_j(a):= block([x0: first(R[a]), y0: second(R[a])],
+  quad_qag ('quad_qag ( block([r: sqrt('x^2+'y^2)], if r>eps then - A('x+x0, 'y+y0)*dw(r) * 'x/r else 0),
+      'x, -cutoff, cutoff, 3) [1], 'y, -cutoff, cutoff, 3) [1]);
+
+
+dsmoth_r(a):= block([x0: first(R[a]), y0: second(R[a])],
+  romberg ('romberg ( block([r: sqrt('x^2+'y^2)], if r>eps then - A('x+x0, 'y+y0)*dw(r) * 'x/r else 0),
+      'x, -cutoff, cutoff), 'y, -cutoff, cutoff));
+
+dsmoth_rph(a):= block([x0: first(R[a]), y0: second(R[a])],
+  quad_qag ('quad_qag ( block([x: 'r*cos(phi), y: 'r*sin(phi)], -A(x+x0, y+y0) * dw('r) * 'r * cos('phi) ),
+      'r, 0, cutoff, 3) [1], 'phi, 0, 2*%pi, 3) [1] );
+
+nprobe: 0;
+if nprobe=0 then plist: makelist(i, i, np) else plist: rest(random_permutation( makelist(i, i, np)), np-nprobe)$
+dA: maplist('dsph_approx_j, plist)$
+trace(dsmoth_r, dsmoth_j);
+dAs: maplist('dsmoth_rph, plist)$
+dAx: makelist( subst([x=R[a][1], y=R[a][2]], dexpr), a, plist)$
+
+load("descriptive");
+Dmax: 2*%pi/Lx;
+l1(x, y):= float(mean( abs(x - y) ) / Dmax);
+
+dl_exact: l1(maplist('first, dA), float(dAx));
+dl_sm   : l1(maplist('first, dA), float(dAs));
+/*
+plot2d( [discrete, makelist(R[a][1], a, plist), dAs - dAx], [style, points] );
+*/
+
+fw: opena("l1-nall-nx2.dat");
+write_data([ktype, ncut, del, dl_exact, dl_sm, Lx, round(nx), cutoff], fw);
+close(fw);

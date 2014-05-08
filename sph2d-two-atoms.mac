@@ -1,0 +1,49 @@
+kill(all);
+load("sph-kernel.mac");
+load("get_equation_of_state.mac");
+load("nint");
+load("sph.mac");
+
+/* lambda([q], q#0 and freeof(x, q))); */
+matchdeclare (A, freeof(x),
+  B, all);
+defmatch (max_of_cos_pat,       A*cos(B), x);
+max_of_cos(e, x):= block([A, B], max_of_cos_pat(e, x), abs(A));
+
+ndim: 2;
+L0: 1.2;
+dx: 0.04;
+cutoff: 1.2/10;
+ktype: wendland6;
+block([numer: true], define_kernel(ndim, cutoff, 'wendland6, 'w, 'dw));
+
+R: [[0.6, 0.6], [0.7, 0.6]];
+v: [[0.0, 0.0], [10.0, 0.0]];
+
+np: length(R);
+rho0: 1.0;
+mass: rho0*dx^ndim;
+m: makelist(mass, i, np)$
+
+create_clist();
+nn: makelist(lsum(if dist(R[i], R[j])<cutoff then 1 else 0, i, nlist(j)),
+  j, np);
+
+c: 4.2;
+sdpd_gamma: 1.0;
+Peq: get_equation_of_state(rho0, c, sdpd_gamma, 0);
+eta: 1.0;
+
+rho: makelist(m[j]*lsum(w(dist(R[j], R[i])), i, nlist(j)), j, np);
+P: maplist('Peq, rho);
+
+Fc: sph_sum(-1/2*(m[j]/rho[j])*(m[i]/rho[i])*(P[i] + P[j])*e(R[i], R[j])*dw(dist(R[j], R[i])));
+Fd: sph_sum(2*eta*m[j]*m[i]*(v[j]-v[i])/(rho[i]*rho[j])/dist(R[j], R[i])*dw(dist(R[j], R[i])));
+F: Fd + Fc;
+
+expr: block([numer: true], sin(2*%pi*x/L0));
+dexpr: diff(expr, x);
+maxD: max_of_cos(dexpr, x);
+A[i]:= block([x: part(R[i], 1), y: part(R[i], 2)], ''expr);
+dA[i]:= block([x: part(R[i], 1), y: part(R[i], 2)], ''dexpr);
+dAsph: maplist('first, sph_sum(-(A[i] + A[j])*m[j]/rho[i]*e(R[j], R[i])*dw(dist(R[j], R[i]))));

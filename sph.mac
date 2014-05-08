@@ -65,7 +65,7 @@ nlist(a):= flatten(maplist(lambda([idx], apply('subvar, cons(cell_lst, idx))), n
 nlist_r(ra):=flatten(maplist(lambda([idx], apply('subvar, cons(cell_lst, idx))), neicell(r2cell(ra))));
 
 dist_aux(ra, rb):= ''(
-  if ndim=1 then      (ra[1] - rb[1])^2
+  if ndim=1 then      abs(ra[1] - rb[1])
   else if ndim=2 then sqrt((ra[1] - rb[1])^2 + (ra[2] - rb[2])^2)
   else if ndim=3 then sqrt((ra[1] - rb[1])^2 + (ra[2] - rb[2])^2 + (ra[3] - rb[3])^2));
 dist(ra, rb):= catch(xreduce('min, maplist( lambda([q],
@@ -82,3 +82,11 @@ block([aux: catch(xreduce(lambda([a, b],
             )),
         lshift)))],
   second(aux)/first(aux));
+
+sph_sum(A)::= buildq([A], block([i, j], makelist(lsum(if i#j then A else 0,
+        i, nlist(j)),
+      j, np)));
+
+one_vector_len(v):= block([listarith: true],
+  sqrt(xreduce("+", v^2)));
+vmax(l):=lmax( maplist('one_vector_len, l));
