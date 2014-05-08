@@ -1,5 +1,7 @@
-define_kernel(ndim, cutoff, ktype, w, dw):= block([R, norm, eps, fsim, dfsim, wexpr, dwexpr, b, ww, bs, sc, par: []],
-  local(R),
+define_kernel(ndim, cutoff, ktype, w, dw):= block([R, eps, fsim, dfsim, wexpr, dwexpr, b, ww, bs, sc, par: []],
+  local(R, norm),
+  if ndim#1 and ndim#2 and ndim#3 then error("ndim must be 1, 2, or 3"),
+  if not numberp(cutoff) then error("cutoff must be a number"),
   if listp(ktype) then (par: rest(ktype), ktype: first(ktype)),
   if ktype='quintic then (
     norm[1]: 1/40,
