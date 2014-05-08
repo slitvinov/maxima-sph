@@ -1,0 +1,5 @@
+one_vector_len(v):= block([listarith: true],
+  sqrt(xreduce("+", v^2)));
+vmax(l):=lmax( maplist('one_vector_len, l));
+linspace(a, b, n):= block([h: (b-a)/(n-1)], makelist( a + h*i, i, 0, n-1));
+logspace(a, b, n):= maplist('exp, linspace(log(a), log(b), n));

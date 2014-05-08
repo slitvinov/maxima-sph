@@ -49,8 +49,8 @@ pbc(ri):= makelist(if ri[d]>L[d] then ri[d]-L[d] else if ri[d]<0 then ri[d]+L[d]
 pbc_ncell(ri):= makelist(if ri[d]>=ncell[d] then ri[d]-ncell[d] else if ri[d]<0 then ri[d]+ncell[d] else ri[d], d, ndim);
 */
 
-pbc(ri):= maplist(frem, ri, L);
-pbc_ncell(ri):= maplist(frem_int, ri, ncell);
+pbc(ri):= if not listp(L) then error("L must be set") else maplist(frem, ri, L);
+pbc_ncell(ri):= maplist('frem_int, ri, ncell);
 
 /* create a cell list `cell_lst' */
 create_clist():=(
@@ -90,9 +90,3 @@ sph_sum(A)::= buildq([A], block([i, j], makelist(lsum(if i#j then A else 0,
         i, nlist(j)),
       j, np)));
 
-one_vector_len(v):= block([listarith: true],
-  sqrt(xreduce("+", v^2)));
-vmax(l):=lmax( maplist('one_vector_len, l));
-
-linspace(a, b, n):= block([h: (b-a)/(n-1)], makelist( a + h*i, i, 0, n-1));
-logspace(a, b, n):= maplist('exp, linspace(log(a), log(b), n));
