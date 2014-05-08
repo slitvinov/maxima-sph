@@ -1,0 +1,35 @@
+sph2d_smoothing_error(L0, cutoff, ktype, nx, fname):= block([L,eps,
+  ncell,cellsize,shift,lshift,n,np,rho0,mass,m,c,sdpd_gamma,Peq,eta,rho,
+  P,Fc,expr,dexpr,maxD,dAsph,dAexact, ndim, dx, R],
+  local(norm, A, dA, cell_lst),
+  block([numer: true], define_kernel(ndim, cutoff, ktype, 'w, 'dw)),
+
+  dx: L0/nx,
+  R: create_list([dx/2 + dx*(i-1), dx/2 + dx*(j-1)], i, 1, nx, j, 1, nx),
+  np: length(R),
+  
+  expr: block([numer: true], sin(2*%pi*x/L0)),
+  dexpr: diff(expr, x),
+  maxD:  2*%pi/L0,
+  define(A(x, y), expr),
+  define(arraymake(A, ['i]), buildq([expr],
+      block([x: part(R[i], 1), y: part(R[i], 2)], expr))),
+  define(arraymake(dA, ['i]), buildq([dexpr],
+      block([x: part(R[i], 1), y: part(R[i], 2)], dexpr))),
+  dAexact: makelist(dA[i], i, 1, np),
+  
+  l1(x, y):= block([numer: true], mean( abs(x - y) ) / maxD),
+  dsmoth_rph(a):= block([x0: first(R[a]), y0: second(R[a])],
+    quad_qag ('quad_qag ( block([x: 'r*cos(phi), y: 'r*sin(phi)],
+          -A(x+x0, y+y0) * dw('r) * 'r * cos('phi)),
+        'r, 0, cutoff, 3) [1], 'phi, 0, 2*%pi, 3) [1] ),
+  
+  trace(dsmoth_rph),
+  dAsmothed: makelist(dsmoth_rph(i), i, 1, np),
+  
+  dl_smothed_exact :block([numer: true], l1(dAsmothed, dAexact)),
+  maxima2punto(R, "p.dat"),
+  
+  fw: opena(fname),
+  write_data(float([ktype, ncut, dl_smothed_exact, L0, cutoff]), fw),
+  close(fw));
