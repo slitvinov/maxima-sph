@@ -2,13 +2,16 @@ load("integer_sequence");
 /* general SPH functions */
 
 /* numer of dimensions (1, 2, 3) */
-define_variable(ndim, 2, integer)$
+/* define_variable(ndim, 2, integer)$  */
+if ndim#1 and ndim#2 and ndim#3 then error("ndim must be 1, 2, or 3")$
 
 /* SPH kernel cutoff */
-define_variable(cutoff, 1.0, float)$
+/* define_variable(cutoff, 1.0, float)$ */
+if not numberp(cutoff) then error("cutoff must be a number")$
 
 /* domain size */
-define_variable(L0, 4.0, float);
+/* define_variable(L0, 4.0, float); */
+if not numberp(L0) then error("L0 must be a number")$
 define_variable(L, makelist(L0, ndim), any);
 
 /* write particles' data to in <X Y Z> text format */
@@ -90,3 +93,6 @@ sph_sum(A)::= buildq([A], block([i, j], makelist(lsum(if i#j then A else 0,
 one_vector_len(v):= block([listarith: true],
   sqrt(xreduce("+", v^2)));
 vmax(l):=lmax( maplist('one_vector_len, l));
+
+linspace(a, b, n):= block([h: (b-a)/(n-1)], makelist( a + h*i, i, 0, n-1));
+logspace(a, b, n):= maplist('exp, linspace(log(a), log(b), n));
