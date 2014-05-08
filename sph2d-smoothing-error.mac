@@ -2,6 +2,8 @@ sph2d_smoothing_error(L0, cutoff, ktype, nx, fname):= block([L,eps,
   ncell,cellsize,shift,lshift,n,np,rho0,mass,m,c,sdpd_gamma,Peq,eta,rho,
   P,Fc,expr,dexpr,maxD,dAsph,dAexact, ndim, dx, R],
   local(norm, A, dA, cell_lst),
+  
+  ndim: 2,
   block([numer: true], define_kernel(ndim, cutoff, ktype, 'w, 'dw)),
 
   dx: L0/nx,
@@ -31,5 +33,5 @@ sph2d_smoothing_error(L0, cutoff, ktype, nx, fname):= block([L,eps,
   maxima2punto(R, "p.dat"),
   
   fw: opena(fname),
-  write_data(float([ktype, ncut, dl_smothed_exact, L0, cutoff]), fw),
+  write_data(float([ktype, dl_smothed_exact, L0, cutoff]), fw),
   close(fw));

@@ -1,8 +1,9 @@
-load("sph-kernel.mac");
+load("sph-kernel/sph-kernel.mac");
 load("get_equation_of_state.mac");
 load("nint");
 load("descriptive");
 load("distrib");
+load("sph-utils.mac");
 load("sph2d-perturbated-grid.mac");
 debugmode(true);
 L0:      1.2;

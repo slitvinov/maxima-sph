@@ -1,14 +1,14 @@
-load("sph-kernel.mac");
+load("sph-kernel/sph-kernel.mac");
 load("get_equation_of_state.mac");
-load("nint");
 load("descriptive");
 load("distrib");
+load("sph-utils.mac");
 load("sph2d-smoothing-error.mac");
 debugmode(true);
 nlogspace([l]):= block([numer: true], apply(logspace, l));
 
 L0: 1.2;
-nx: 3;
+nx: 20;
 for ktype in ['wendland6, 'laguerrewendland4eps] do
 for cutoff in nlogspace(1.2e-3, 1.2, 10) do
 sph2d_smoothing_error(L0, cutoff, ktype, nx, "l1-cutoff.dat");
