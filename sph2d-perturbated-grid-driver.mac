@@ -5,7 +5,9 @@ load("descriptive");
 load("distrib");
 load("sph2d-perturbated-grid.mac");
 debugmode(true);
+L0:      1.2;
+cutoff : L0/10;
 for ncut in [1.0, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0] do
 for del in [0, 0.0002, 0.002, 0.02] do
 for ktype in ['wendland6, laguerrewendland4eps] do
-sph2d_perturbated_grid(ncut, del, ktype);
+sph2d_perturbated_grid(L0, cutoff, ncut, ktype, del, "l1-ncut.dat");

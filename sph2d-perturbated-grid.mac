@@ -1,16 +1,14 @@
-sph2d_perturbated_grid(ncut, del, ktype):= block([L,eps,
+sph2d_perturbated_grid(L0, cutoff, ncut, ktype, del, fname):= block([L,eps,
   ncell,cellsize,shift,lshift,n,np,rho0,mass,m,c,sdpd_gamma,Peq,eta,rho,
-  P,Fc,expr,dexpr,maxD,dAsph,dAexact, ndim, L0, cutoff, nx, dx, R],
+  P,Fc,expr,dexpr,maxD,dAsph,dAexact, ndim, nx, dx, R],
   local(norm, A, dA, cell_lst),
   
   ndim: 2,
-  L0: 1.2,
-  cutoff: 1.2/10,
   load("sph.mac"),
   
   nx: round(ncut*10),
   dx: L0/nx,
-  block([numer: true], define_kernel(ndim, cutoff, 'wendland6, 'w, 'dw)),
+  block([numer: true], define_kernel(ndim, cutoff, ktype, 'w, 'dw)),
   
   R: create_list([dx/2 + dx*(i-1), dx/2 + dx*(j-1)], i, 1, nx, j, 1, nx),
   if del>0 then block([del_dim: del*dx],
@@ -20,6 +18,7 @@ sph2d_perturbated_grid(ncut, del, ktype):= block([L,eps,
     R: maplist('pbc, R)),
   
   np: length(R),
+  print(np),
   rho0: 1.0,
   mass: rho0*dx^ndim,
   m: makelist(mass, i, np),
@@ -53,7 +52,6 @@ sph2d_perturbated_grid(ncut, del, ktype):= block([L,eps,
   
   trace(dsmoth_rph),
   dAsmothed: makelist(dsmoth_rph(i), i, 1, np),
-  dAsmothed: makelist(i, i, 1, np),
   
   dl_sph_exact     :block([numer: true], l1(dAexact, dAsph)),
   dl_sph_smothed   :block([numer: true], l1(dAsmothed, dAsph)),
@@ -61,7 +59,7 @@ sph2d_perturbated_grid(ncut, del, ktype):= block([L,eps,
   res: vmax(Fc),
   maxima2punto(R, "p.dat"),
   
-  fw: opena("l1-new.dat"),
+  fw: opena(fname),
   write_data(float([ktype, ncut, del, dl_sph_exact,
       dl_sph_smothed, dl_smothed_exact, res, L0, round(nx), cutoff]), fw),
   close(fw));
